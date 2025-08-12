@@ -6,12 +6,27 @@ from app.models import EnrollResponse, AuthResponse
 from app.face_pipeline import FacePipeline
 from app.storage import VectorStore
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
+
 
 load_dotenv()  
 SIM_THRESHOLD = float(os.getenv("SIM_THRESHOLD", "0.6"))
 
 app = FastAPI(title="Local Face Auth MVP (MTCNN + FaceNet)")
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+]
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 pipeline = FacePipeline(device="cpu")
 store = VectorStore(dim=512, use_cosine=True)
 

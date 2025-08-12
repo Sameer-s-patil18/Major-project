@@ -1,66 +1,77 @@
-# == Python cache / compiled files ==
+# =========================
+# Global Git Ignore for Face Auth Project
+# Covers: Python backend + React/Vite frontend
+# =========================
+
+# --- Python / FastAPI ---
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 *$py.class
 
-# Byte-compiled / optimized / DLL files
-*.so
-*.dll
-*.dylib
-
-# == Virtual environments ==
+# Virtual environments
 .venv/
 venv/
 ENV/
 env/
 env.bak/
 
-# == Environment / secret files ==
-.env
-.env.*        # ignore .env.local, .env.production, etc.
-!*.example    # allow .env.example for safe key names
-
-# == OS and editor-specific ==
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-
-# == Logs and debug info ==
-*.log
-logs/
-pip-log.txt
-pip-delete-this-directory.txt
-
-# == Build / distribution ==
+# Python packaging / build
 build/
 dist/
 *.egg-info/
 .eggs/
-*.pid
 
-# == Unit test / coverage ==
+# Test / coverage cache
+.pytest_cache/
 .coverage
 *.cover
 htmlcov/
 .tox/
 .nox/
-.pytest_cache/
 
-# == Jupyter Notebooks checkpoints ==
-.ipynb_checkpoints
+# Type checker / formatter cache
+.mypy_cache/
+.ruff_cache/
 
-# == Data / runtime output ==
-data/faiss_index.bin
-data/users.json
-data/debug_embs/
-*.db
-*.sqlite
-*.sqlite3
+# Logs
+*.log
+*.pid
 
-# == Ultralytics/YOLO cache ==
-runs/
-yolov8n-face.pt
+# --- Backend runtime data ---
+backend/data/
+backend/data/**/*
+backend/runs/
+
+# Model weights
 yolov8n.pt
+yolov8n-face.pt
+
+# --- Node / React / Vite ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Frontend logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# --- Env files ---
+.env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# --- OS / Editor junk ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
