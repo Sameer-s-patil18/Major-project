@@ -1,0 +1,66 @@
+# == Python cache / compiled files ==
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*$py.class
+
+# Byte-compiled / optimized / DLL files
+*.so
+*.dll
+*.dylib
+
+# == Virtual environments ==
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+
+# == Environment / secret files ==
+.env
+.env.*        # ignore .env.local, .env.production, etc.
+!*.example    # allow .env.example for safe key names
+
+# == OS and editor-specific ==
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# == Logs and debug info ==
+*.log
+logs/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# == Build / distribution ==
+build/
+dist/
+*.egg-info/
+.eggs/
+*.pid
+
+# == Unit test / coverage ==
+.coverage
+*.cover
+htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+
+# == Jupyter Notebooks checkpoints ==
+.ipynb_checkpoints
+
+# == Data / runtime output ==
+data/faiss_index.bin
+data/users.json
+data/debug_embs/
+*.db
+*.sqlite
+*.sqlite3
+
+# == Ultralytics/YOLO cache ==
+runs/
+yolov8n-face.pt
+yolov8n.pt
