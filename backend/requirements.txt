@@ -57,3 +57,7 @@ uvloop==0.21.0
 watchfiles==1.1.0
 websockets==15.0.1
 wheel==0.45.1
+
+# Added for blockchain (Ethereum/Sepolia) integration
+web3==7.13.0
+eth_account==0.13.7
