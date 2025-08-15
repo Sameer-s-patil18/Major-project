@@ -1,64 +1,23 @@
-import { useState } from 'react';
-
-function Enroll() {
-  const [file, setFile] = useState(null);
-  const [res, setRes] = useState(null);
-
-  const submit = async () => {
-    if (!file) return;
-    const fd = new FormData();
-    fd.append('image', file);
-    const r = await fetch('http://127.0.0.1:8000/enroll', {
-      method: 'POST',
-      body: fd
-    });
-    const data = await r.json();
-    setRes(data);
-  };
-
-  return (
-    <div>
-      <h2>Enroll</h2>
-      <input type="file" onChange={(e) => setFile(e.target.files[0])} />
-      <button onClick={submit} disabled={!file}>Submit</button>
-      <pre>{res && JSON.stringify(res, null, 2)}</pre>
-    </div>
-  );
-}
-
-function Auth() {
-  const [file, setFile] = useState(null);
-  const [res, setRes] = useState(null);
-
-  const submit = async () => {
-    if (!file) return;
-    const fd = new FormData();
-    fd.append('image', file);
-    const r = await fetch('http://127.0.0.1:8000/auth', {
-      method: 'POST',
-      body: fd
-    });
-    const data = await r.json();
-    setRes(data);
-  };
-
-  return (
-    <div>
-      <h2>Auth</h2>
-      <input type="file" onChange={(e) => setFile(e.target.files[0])} />
-      <button onClick={submit} disabled={!file}>Submit</button>
-      <pre>{res && JSON.stringify(res, null, 2)}</pre>
-    </div>
-  );
-}
+import { useState } from "react";
+import ConnectWallet from "./components/ConnectWallet";
+import EnrollForm from "./components/EnrollForm";
+import AuthForm from "./components/AuthForm";
+import OnchainCheck from "./components/OnchainCheck";
 
 export default function App() {
+  const [wallet, setWallet] = useState(null);
+
   return (
-    <div style={{ padding: 16, fontFamily: 'Arial' }}>
-      <h1>Face Auth Frontend</h1>
-      <Enroll />
-      <hr />
-      <Auth />
+    <div style={{ padding: "20px" }}>
+      <h1>Face Auth + Sepolia Commitment (Phase 1)</h1>
+      <ConnectWallet onConnected={setWallet} />
+      {wallet && (
+        <>
+          <EnrollForm wallet={wallet} />
+          <AuthForm wallet={wallet} />
+          <OnchainCheck wallet={wallet} />
+        </>
+      )}
     </div>
   );
 }

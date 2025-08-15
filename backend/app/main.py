@@ -4,6 +4,8 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import numpy as np
+from fastapi import HTTPException
+
 
 from app.models import EnrollResponse, AuthResponse
 from app.face_pipeline import FacePipeline
@@ -22,9 +24,16 @@ app.add_middleware(
 
 pipeline = FacePipeline(device="cpu")
 store = VectorStore(dim=512, use_cosine=True)
+def validate_wallet(addr: str) -> str:
+    if not isinstance(addr, str) or not addr.startswith("0x") or len(addr) != 42:
+        raise HTTPException(status_code=400, detail="Invalid wallet address")
+    return addr.lower()
+
 
 @app.post("/enroll", response_model=EnrollResponse)
 async def enroll(wallet: str, image: UploadFile = File(...)):
+    wallet = validate_wallet(wallet)
+
     if image.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(status_code=400, detail="Only JPEG/PNG supported")
 
@@ -33,19 +42,26 @@ async def enroll(wallet: str, image: UploadFile = File(...)):
     if emb is None:
         raise HTTPException(status_code=422, detail="No face detected")
 
-    # Optional: check raw norm (not required to be 1)
-    # print("Raw embed norm (enroll):", float(np.linalg.norm(emb)))
+    # If wallet already bound, remove its previous vector(s)
+    old_rec = store.get_wallet_record(wallet)
+    if old_rec and old_rec.get("user_id"):
+        old_uid = old_rec["user_id"]
+        store.delete_vector(old_uid)  # if present in FAISS
+        # Optional: you can keep the old record fields; we’ll overwrite on bind
 
+    # Add new vector
     user_id = str(uuid.uuid4())
     digest = store.add_vector(user_id, emb)
 
+    # Build commitment and write on-chain
     commitment_hash, salt = build_commitment(digest)
     try:
         tx_hash = onchain_set(commitment_hash)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"On-chain commit failed: {str(e)}")
 
-    store.bind_wallet(wallet, user_id, digest, salt)
+    # Bind wallet to the new (single) user_id
+    store.bind_wallet_single(wallet, user_id, digest, salt)
 
     return EnrollResponse(
         user_id=user_id,
@@ -56,8 +72,10 @@ async def enroll(wallet: str, image: UploadFile = File(...)):
         message="Enrollment successful and on-chain commitment written"
     )
 
+
 @app.post("/auth", response_model=AuthResponse)
 async def auth(wallet: str, image: UploadFile = File(...)):
+    wallet = validate_wallet(wallet)
     if image.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(status_code=400, detail="Only JPEG/PNG supported")
 
@@ -95,3 +113,13 @@ def onchain(wallet: str):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/binding/{wallet}")
+def binding(wallet: str):
+    wallet = validate_wallet(wallet)
+    rec = store.get_wallet_record(wallet)
+    if not rec:
+        raise HTTPException(status_code=404, detail="No binding")
+    return {"wallet": wallet, **rec}
+

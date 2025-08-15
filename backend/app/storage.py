@@ -1,7 +1,7 @@
 import json
 import os
 import hashlib
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 
 import faiss
 import numpy as np
@@ -25,15 +25,12 @@ def _l2_normalize_rows(vec: np.ndarray) -> np.ndarray:
 
 class VectorStore:
     def __init__(self, dim: int = 512, use_cosine: bool = True):
-        """
-        For cosine similarity, we use IndexFlatIP and L2-normalize vectors
-        both when adding and querying, so the returned inner product equals cosine.
-        """
         self.dim = dim
         self.use_cosine = use_cosine
         self.index = faiss.IndexFlatIP(dim) if use_cosine else faiss.IndexFlatL2(dim)
         self.id_map: List[str] = []
-        self.wallets = {}
+        self.wallets: Dict[str, Dict[str, str]] = {}
+        self._uid_to_idx: Dict[str, int] = {}  # user_id -> index in id_map
 
         # Load persisted index/id_map
         if os.path.isfile(FAISS_INDEX_BIN) and os.path.isfile(USERS_JSON):
@@ -52,8 +49,9 @@ class VectorStore:
             except Exception:
                 self.wallets = {}
 
-        # Diagnostics: ensure correct index type
-        # print("FAISS index type:", type(self.index).__name__, "dim:", self.index.d)
+        # Build reverse map
+        for i, uid in enumerate(self.id_map):
+            self._uid_to_idx[uid] = i
 
     def persist(self):
         faiss.write_index(self.index, FAISS_INDEX_BIN)
@@ -62,75 +60,79 @@ class VectorStore:
         with open(WALLETS_JSON, "w", encoding="utf-8") as f:
             json.dump(self.wallets, f)
 
+    def _rebuild_index_from_arrays(self, vectors: np.ndarray, ids: List[str]):
+        """Internal: rebuild index from normalized float32 vectors and aligned ids."""
+        self.index = faiss.IndexFlatIP(self.dim) if self.use_cosine else faiss.IndexFlatL2(self.dim)
+        if vectors.size:
+            self.index.add(vectors)
+        self.id_map = ids[:]
+        # Rebuild reverse map
+        self._uid_to_idx = {uid: i for i, uid in enumerate(self.id_map)}
+        self.persist()
+
+    def delete_vector(self, user_id: str) -> bool:
+        if user_id not in self._uid_to_idx:
+            return False
+        idx_to_remove = self._uid_to_idx[user_id]
+
+        nt = self.index.ntotal
+        if nt == 0:
+            return False
+
+        # Reconstruct each vector (IndexFlat supports reconstruct)
+        kept_vecs = []
+        kept_ids = []
+        for i in range(nt):
+            if i == idx_to_remove:
+                continue
+            v = self.index.reconstruct(i)           # returns np.ndarray shape (dim,)
+            kept_vecs.append(v.astype('float32', copy=False))
+            kept_ids.append(self.id_map[i])
+
+        if kept_vecs:
+            arr = np.stack(kept_vecs, axis=0)       # (N-1, dim)
+        else:
+            arr = np.zeros((0, self.dim), dtype='float32')
+
+        # Rebuild index with the kept vectors
+        self._rebuild_index_from_arrays(arr, kept_ids)
+        return True
+
     def add_vector(self, user_id: str, embedding: np.ndarray) -> str:
-        """
-        embedding: raw model output, shape (512,), float32 or convertible.
-        We normalize before adding to IndexFlatIP to get cosine similarity.
-        Returns a SHA-256 digest of the RAW embedding for audit.
-        """
         raw = _ensure_float32_2d(embedding)
         if raw.shape[1] != self.dim:
-            raise ValueError(f"Expected embedding dim {self.dim}, got {raw.shape[1]}")
+            raise ValueError(f"Expected embedding dim {self.dim}, got {raw.shape}")
 
         vec = _l2_normalize_rows(raw) if self.use_cosine else raw
 
-        # Optional diagnostics
-        # print("Add norm:", float(np.linalg.norm(vec, axis=1)[0]))
-
+        # Add to index
         self.index.add(vec)
         self.id_map.append(user_id)
+        self._uid_to_idx[user_id] = len(self.id_map) - 1
         self.persist()
 
         digest = hashlib.sha256(embedding.astype("float32", copy=False).tobytes()).hexdigest()
         return digest
 
     def search(self, query: np.ndarray, k: int = 1) -> Tuple[Optional[str], float]:
-        """
-        query: raw model output, shape (512,).
-        We normalize before search to keep cosine in [-1,1].
-        """
         raw = _ensure_float32_2d(query)
         if raw.shape[1] != self.dim:
-            raise ValueError(f"Expected embedding dim {self.dim}, got {raw.shape[1]}")
+            raise ValueError(f"Expected embedding dim {self.dim}, got {raw.shape}")
 
         vec = _l2_normalize_rows(raw) if self.use_cosine else raw
-
-        # Optional diagnostics
-        # print("Search norm:", float(np.linalg.norm(vec, axis=1)[0]))
 
         if self.index.ntotal == 0:
             return None, 0.0
 
         scores, idxs = self.index.search(vec, k)
-        top_idx = int(idxs[0][0])
-        top_score = float(scores[0][0])
+        top_idx = int(idxs)
+        top_score = float(scores)
         if top_idx == -1 or top_idx >= len(self.id_map):
             return None, 0.0
         return self.id_map[top_idx], top_score
 
-    def rebuild_index_from_vectors(self, vectors: List[np.ndarray], ids: List[str]):
-        """
-        Rebuild the index from RAW embeddings if old index had unnormalized vectors.
-        """
-        if len(vectors) != len(ids):
-            raise ValueError("vectors and ids must have same length")
-
-        self.index = faiss.IndexFlatIP(self.dim) if self.use_cosine else faiss.IndexFlatL2(self.dim)
-        self.id_map = []
-
-        if not vectors:
-            self.persist()
-            return
-
-        arr = np.stack([v.astype("float32", copy=False) for v in vectors], axis=0)
-        if self.use_cosine:
-            arr = _l2_normalize_rows(arr)
-
-        self.index.add(arr)
-        self.id_map.extend(ids)
-        self.persist()
-
-    def bind_wallet(self, wallet: str, user_id: str, digest: str, salt: str):
+    def bind_wallet_single(self, wallet: str, user_id: str, digest: str, salt: str):
+        """Bind wallet to exactly one user_id. Overwrites previous binding."""
         self.wallets[wallet.lower()] = {
             "user_id": user_id,
             "embedding_digest": digest,
@@ -140,3 +142,7 @@ class VectorStore:
 
     def get_wallet_record(self, wallet: str):
         return self.wallets.get(wallet.lower())
+
+    def get_user_ids_for_wallet(self, wallet: str) -> List[str]:
+        rec = self.get_wallet_record(wallet)
+        return [rec["user_id"]] if rec and "user_id" in rec else []
