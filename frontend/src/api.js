@@ -1,26 +1,21 @@
-const BACKEND_URL = "http://127.0.0.1:8000"; // Change if backend hosted elsewhere
+const BACKEND_URL = "http://127.0.0.1:8000";
 
-export async function enroll(wallet, file) {
-  const formData = new FormData();
-  formData.append("image", file);
-  const res = await fetch(`${BACKEND_URL}/enroll?wallet=${wallet}`, {
+async function postImage(url, wallet, blob) {
+  const fd = new FormData();
+  fd.append("image", blob, "photo.jpg");
+  const res = await fetch(`${BACKEND_URL}${url}?wallet=${wallet}`, {
     method: "POST",
-    body: formData
+    body: fd
   });
   return res.json();
 }
 
-export async function auth(wallet, file) {
-  const formData = new FormData();
-  formData.append("image", file);
-  const res = await fetch(`${BACKEND_URL}/auth?wallet=${wallet}`, {
-    method: "POST",
-    body: formData
-  });
-  return res.json();
+export async function enroll(wallet, fileOrBlob) {
+  const blob = fileOrBlob instanceof Blob ? fileOrBlob : fileOrBlob;
+  return postImage("/enroll", wallet, blob);
 }
 
-export async function onchain(wallet) {
-  const res = await fetch(`${BACKEND_URL}/onchain/${wallet}`);
-  return res.json();
+export async function auth(wallet, fileOrBlob) {
+  const blob = fileOrBlob instanceof Blob ? fileOrBlob : fileOrBlob;
+  return postImage("/auth", wallet, blob);
 }
