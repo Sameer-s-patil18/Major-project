@@ -68,6 +68,10 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 
+#myenv
+backend/myenv
+backend/temp_image.png
+
 # --- OS / Editor junk ---
 .DS_Store
 Thumbs.db

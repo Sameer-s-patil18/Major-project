@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 import numpy as np
 from fastapi import HTTPException
 
-
+from app.imageParser import imageToString
+from app.fileUpload import uploadImageIPFS
 from app.models import EnrollResponse, AuthResponse
 from app.face_pipeline import FacePipeline
 from app.storage import VectorStore
@@ -122,4 +123,11 @@ def binding(wallet: str):
     if not rec:
         raise HTTPException(status_code=404, detail="No binding")
     return {"wallet": wallet, **rec}
+
+@app.post("/adding/{document}")
+def addingDocument(document: str, image: UploadFile = File(...)):
+    imageToString(image)
+    cid = uploadImageIPFS(image)
+    
+    pass
 
