@@ -19,3 +19,8 @@ export async function auth(wallet, fileOrBlob) {
   const blob = fileOrBlob instanceof Blob ? fileOrBlob : fileOrBlob;
   return postImage("/auth", wallet, blob);
 }
+
+export async function addDocument(wallet, docType, fileOrBlob) {
+  const blob = fileOrBlob instanceof Blob ? fileOrBlob : fileOrBlob;
+  return postImage(`/adding/${docType}`, wallet, blob);
+}

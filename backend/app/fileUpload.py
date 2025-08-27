@@ -2,8 +2,8 @@ import ipfshttpclient
 
 def uploadImageIPFS(image):
     client = ipfshttpclient.connect()
-
-    res = client.add(image)
+    fileBytes = image.file.read()
+    res = client.add(fileBytes)
 
     cid = res['Hash']
     return cid

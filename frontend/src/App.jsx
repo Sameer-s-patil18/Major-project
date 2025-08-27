@@ -78,7 +78,7 @@ function App() {
           />
         )}
         
-        {view === "documents" && <DocumentsPanel />}
+        {view === "documents" && <DocumentsPanel wallet = {wallet}/>}
       </main>
     </div>
   );

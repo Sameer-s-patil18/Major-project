@@ -1,6 +1,34 @@
-import { FileText, Shield, CheckCircle, Download, Eye } from "lucide-react";
+import { FileText, Shield, CheckCircle, Download, Eye, X } from "lucide-react";
+import { useState } from "react";
+import { addDocument } from "../api";
 
-export default function DocumentsPanel() {
+export default function DocumentsPanel({ wallet }) {
+
+  const [ addDoc, setAddDoc ] = useState(false);
+  const [ veiwDoc, setViewDoc ] = useState(false);
+  const [ docType, setDocType ] = useState("");
+  const [ msg, setMsg ] = useState(null);
+  const [ file, setFile] = useState(null);
+
+  const getDocs = async() => {};
+
+  async function addDocu() {
+    if (!docType) return setMsg("Please select a document type");
+    if (!file) return setMsg("Please select a file to upload");
+
+    try {
+      const response = await addDocument(wallet, docType, file);
+      // setMsg(`Upload successful! CID: ${response.stored}`);
+      console.log(response);
+      setAddDoc(false);
+      setFile(null);
+      setDocType("");
+    } catch (err) {
+      console.error(err);
+      setMsg("Upload failed. Try again.");
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
       <div className="max-w-4xl w-full">
@@ -36,17 +64,90 @@ export default function DocumentsPanel() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center space-x-2">
+              <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center space-x-2"
+                onClick={() => {setViewDoc(!veiwDoc); setAddDoc(false);}}
+              >
                 <Eye className="w-5 h-5" />
                 <span>View Documents</span>
               </button>
-              <button className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center space-x-2">
+              <button className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center space-x-2"
+                onClick={() => {setAddDoc(!addDoc); setViewDoc(false);}}  
+              >
                 <Download className="w-5 h-5" />
                 <span>Upload New</span>
               </button>
             </div>
           </div>
         </div>
+
+        {addDoc && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md relative">
+              {/* Close Button */}
+              <button
+                onClick={() => setAddDoc(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Upload Document</h2>
+              <p className="text-gray-600 mb-4">Choose a file to upload securely.</p>
+              <input 
+                list = "documents"
+                placeholder="Select Document Type"
+                value={docType}
+                className="mb-4 w-full border border-gray-300 rounded-lg p-2"
+                onChange={(e) => setDocType(e.target.value)}
+                required
+                contentEditable={false}
+              />
+                <datalist id="documents">
+                  <option value="Passport" />
+                  <option value="Driver's License" />
+                  <option value="Aadhar Card" />
+                </datalist>
+              <input
+                type="file"
+                className="mb-4 w-full border border-gray-300 rounded-lg p-2"
+                onChange={(e) => setFile(e.target.files[0])}
+              />
+
+              <button
+                onClick={() => addDocu()}
+                className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-medium transition-all"
+              >
+                Upload
+              </button>
+            </div>
+          </div>
+        )}
+
+        {veiwDoc && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg relative">
+              <button
+                onClick={() => setViewDoc(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Your Documents
+              </h2>
+              <p className="text-gray-600 mb-4">
+                Here you could list documents fetched from your backend.
+              </p>
+              {/* Example placeholder */}
+              <ul className="list-disc list-inside text-gray-700 space-y-2">
+                <li>Passport.pdf</li>
+                <li>License.png</li>
+                <li>Transcript.docx</li>
+              </ul>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-lg text-center">
