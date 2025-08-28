@@ -15,8 +15,6 @@ def imageToString(uploadFile: UploadFile, doc: str):
     print(text)
     if(doc == 'Aadhar Card'):
         return aadhar_text(text)
-    elif(doc == 'Pan Card'):
-        return panCard_text(text)
     
 
 def aadhar_text(text: str):
@@ -37,33 +35,15 @@ def aadhar_text(text: str):
         "AadharNo": adhaar_no.group() if adhaar_no else None
     }
 
-def panCard_text(text: str):
-    dob = re.search(r"\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b", text)
-    pan_no = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])", text, re.IGNORECASE)
+# def panCard_text(text: str):
+#     dob = re.search(r"\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b", text)
+#     pan_no = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])", text, re.IGNORECASE)
 
-    print("dob:",dob)
-    print("pan no:", pan_no)
-    if dob == None or pan_no == None:
-        return "error"
-    return {
-        "dob": dob.group() if dob else None,
-        "pan no": pan_no.group() if pan_no else None
-    }
-
-# panCard_text("""INCOMETAXDEPARTMENT © @t_—s GOVT. OF INDIA
-
-# MADHURA KS i %
-# Poca
-
-# BEEJADI GANAPAJAH GURURAJA RAO.
-
-# 23/01/1980
-
-# Parmanent Account Number
-
-# AQGPMG67§9A
-
-# Nookbusadee
-
-# Signature
-# """)
+#     print("dob:",dob)
+#     print("pan no:", pan_no)
+#     if dob == None or pan_no == None:
+#         return "error"
+#     return {
+#         "dob": dob.group() if dob else None,
+#         "pan no": pan_no.group() if pan_no else None
+#     }
