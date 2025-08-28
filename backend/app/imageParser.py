@@ -29,7 +29,7 @@ def aadhar_text(text: str):
     if dob == None or gender == None or adhaar_no == None or name == None:
         return "error"
     return {
-        "dob": dob.group() if dob else None,
+        "dob": dob.group(1) if dob else None,
         "gender": gender.group() if gender else None,
         "name": name.group() if name else None,
         "AadharNo": adhaar_no.group() if adhaar_no else None

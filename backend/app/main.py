@@ -130,5 +130,8 @@ def addingDocument(document: str, wallet: str, image: UploadFile = File(...)):
     # cid = uploadImageIPFS(image)
     cid = 0
     return {"objectStored": cid, "obj": obj}
+
+@app.get("/getFiles/{wallet}")
+def retrieveFiles(wallet: str):
     pass
 

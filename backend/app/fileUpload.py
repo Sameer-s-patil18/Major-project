@@ -1,12 +1,59 @@
 import ipfshttpclient
+import io
+from fastapi.responses import StreamingResponse
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import os
+import zipfile
+
+# Encryption key should be 16, 24, or 32 bytes long (AES-128, AES-192, AES-256)
+# Store and manage this securely!
+AES_KEY = os.urandom(32)  # For example purpose, generate a random key
+
+def encrypt_file(data: bytes) -> bytes:
+    aesgcm = AESGCM(AES_KEY)
+    nonce = os.urandom(12)  # 96-bit nonce
+    encrypted = aesgcm.encrypt(nonce, data, None)
+    return nonce + encrypted  # prepend nonce for decryption
+
+def decrypt_file(data: bytes) -> bytes:
+    aesgcm = AESGCM(AES_KEY)
+    nonce = data[:12]
+    encrypted = data[12:]
+    decrypted = aesgcm.decrypt(nonce, encrypted, None)
+    return decrypted
+
 
 def uploadImageIPFS(image):
     client = ipfshttpclient.connect()
     fileBytes = image.file.read()
-    res = client.add_bytes(fileBytes)
+    encrypted_bytes = encrypt_file(fileBytes)   # Encrypt before uploading
 
+    res = client.add_bytes(encrypted_bytes)
     return res
 
-def fileRetrieve(cid):
-    
-    pass
+
+def fileRetrieve(cidLis):
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
+        client = ipfshttpclient.connect()
+        for cid in cidLis:
+            try:
+                content = client.cat(cid)
+                decrypted_content = decrypt_file(content)  # Decrypt after retrieval
+                zip_file.writestr(cid, decrypted_content)
+            except Exception as e:
+                zip_file.writestr(f"{cid}_ERROR.txt", str(e))
+    zip_buffer.seek(0)
+    return StreamingResponse(zip_buffer, media_type='application/zip', headers={
+        "Content-Disposition": "attachment; filename=ipfs_files.zip"
+    })
+
+
+def DeleteFile(cid):
+    client = ipfshttpclient.connect()
+    try:
+        client.pin.rm(cid)
+        client.repo.gc()
+        return {"message": f"Unpinned and garbage collected CID {cid} successfully."}
+    except Exception as e:
+        return {"error": str(e)}
