@@ -126,8 +126,9 @@ def binding(wallet: str):
 
 @app.post("/adding/{document}")
 def addingDocument(document: str, wallet: str, image: UploadFile = File(...)):
-    obj = imageToString(image)
-    cid = uploadImageIPFS(image)
+    obj = imageToString(image, document)
+    # cid = uploadImageIPFS(image)
+    cid = 0
     return {"objectStored": cid, "obj": obj}
     pass
 
