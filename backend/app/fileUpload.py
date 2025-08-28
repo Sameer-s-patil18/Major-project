@@ -6,3 +6,7 @@ def uploadImageIPFS(image):
     res = client.add_bytes(fileBytes)
 
     return res
+
+def fileRetrieve(cid):
+    
+    pass

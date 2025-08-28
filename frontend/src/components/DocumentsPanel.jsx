@@ -19,12 +19,12 @@ export default function DocumentsPanel({ wallet }) {
     try {
       const response = await addDocument(wallet, docType, file);
       // setMsg(`Upload successful! CID: ${response.stored}`);
+      console.log(response);
       if(response.obj === "error") {
         setError(true);
         return setMsg("please insert a propper close up image of the document");
       }
       console.log("Document uploaded:", response.obj);
-      // console.log(response);
       setAddDoc(false);
       setFile(null);
       setDocType("");

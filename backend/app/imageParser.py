@@ -19,14 +19,14 @@ def imageToString(uploadFile: UploadFile, doc: str):
 
 def aadhar_text(text: str):
     adhaar_no = re.search(r"\b\d{4}\s\d{4}\s\d{4}", text)
-    dob = re.search(r"DOB[:\-]?\s*(\d{2}[\/\-]\d{2}[\/\-]\d{4})", text)
+    dob = re.search(r"DOB?\s[:\-]?\s*(\d{2}[\/\-]\d{2}[\/\-]\d{4})", text)
     gender = re.search(r"(Male|Female)", text)
     name = re.search(r"\b([A-Z][a-z]+(?:\s[A-Z][a-z]+){0,3})\b", text)
     print("dob:", dob)
     print(gender)
     print("Adhaar:", adhaar_no)
-    print("name", name)
-    if dob or gender or adhaar_no or name:
+    print("name:", name)
+    if dob == None or gender == None or adhaar_no == None or name == None:
         return "error"
     return {
         "dob": dob.group() if dob else None,
