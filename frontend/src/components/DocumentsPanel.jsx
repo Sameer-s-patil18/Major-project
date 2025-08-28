@@ -9,7 +9,7 @@ export default function DocumentsPanel({ wallet }) {
   const [ docType, setDocType ] = useState("");
   const [ msg, setMsg ] = useState(null);
   const [ file, setFile] = useState(null);
-
+  const [ error, setError ] = useState(false);
   const getDocs = async() => {};
 
   async function addDocu() {
@@ -19,12 +19,18 @@ export default function DocumentsPanel({ wallet }) {
     try {
       const response = await addDocument(wallet, docType, file);
       // setMsg(`Upload successful! CID: ${response.stored}`);
-      console.log(response);
+      if(response.obj === "error") {
+        setError(true);
+        return setMsg("please insert a propper close up image of the document");
+      }
+      console.log("Document uploaded:", response.obj);
+      // console.log(response);
       setAddDoc(false);
       setFile(null);
       setDocType("");
     } catch (err) {
       console.error(err);
+      setError(true);
       setMsg("Upload failed. Try again.");
     }
   };
@@ -106,6 +112,7 @@ export default function DocumentsPanel({ wallet }) {
                   <option value="Passport" />
                   <option value="Driver's License" />
                   <option value="Aadhar Card" />
+                  <option value="Pan Card" />
                 </datalist>
               <input
                 type="file"
@@ -119,6 +126,23 @@ export default function DocumentsPanel({ wallet }) {
               >
                 Upload
               </button>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md relative">
+              {/* Close Button */}
+              <button
+                onClick={() => setError(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Upload Failed</h2>
+              {msg && <div className="mb-4 text-red-600">{msg}</div>}
             </div>
           </div>
         )}
