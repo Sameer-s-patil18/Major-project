@@ -4,10 +4,16 @@ from fastapi.responses import StreamingResponse
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os
 import zipfile
+from dotenv import load_dotenv
 
 # Encryption key should be 16, 24, or 32 bytes long (AES-128, AES-192, AES-256)
 # Store and manage this securely!
-AES_KEY = os.urandom(32)  # For example purpose, generate a random key
+# AES_KEY = os.urandom(32) 
+
+# print(AES_KEY) # For example purpose, generate a random key
+load_dotenv()
+
+AES_KEY = os.getenv("AES_KEY")
 
 def encrypt_file(data: bytes) -> bytes:
     aesgcm = AESGCM(AES_KEY)

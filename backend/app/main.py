@@ -134,4 +134,3 @@ def addingDocument(document: str, wallet: str, image: UploadFile = File(...)):
 @app.get("/getFiles/{wallet}")
 def retrieveFiles(wallet: str):
     pass
-
