@@ -1,62 +1,91 @@
 import cv2
-from pytesseract import image_to_string
 import re
-from fastapi import UploadFile
 import numpy as np
+from fastapi import UploadFile
+import easyocr
+from transformers import pipeline
+
+ner_pipeline = pipeline("ner", model="Davlan/xlm-roberta-base-ner-hrl", grouped_entities=True)
+
+reader = easyocr.Reader(['en', 'kn'])
 
 def imageToString(uploadFile: UploadFile, doc: str):
     file_bytes = np.frombuffer(uploadFile.file.read(), np.uint8)
     im = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    # im = cv2.imread(uploadFile)
+
+    im = cv2.resize(im, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
     gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-    # cid = uploadImageIPFS(uploadFile)
-    binary_image = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
-    cv2.imwrite('temp_image.png', binary_image)
-    text = image_to_string(binary_image, lang="eng+kan+hin")
+    gray = cv2.bilateralFilter(gray, 11, 17, 17)
+
+    results = reader.readtext(gray, detail=0)
+    text = "\n".join(results)
+
+    print("===== RAW OCR TEXT =====")
     print(text)
-    if(doc == 'Aadhar Card'):
+    print("========================")
+
+    if doc.lower() == 'aadhar card':
         return aadhar_text(text)
-    
+
 
 def aadhar_text(text: str):
-    adhaar_no = re.search(r"\b\d{4}\s\d{4}\s\d{4}", text)
-    dob = re.search(r"DOB?\s[:\-]?\s*(\d{2}[\/\-]\d{2}[\/\-]\d{4})", text)
-    gender = re.search(r"(Male|Female)", text)
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+
     name = None
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for i, line in enumerate(lines):
-        if ("My Aadhaar" in line) or ("ನನ್ನ ಆಧಾರ್" in line):
-            if i + 1 < len(lines):
-                candidate = lines[i+1]
-                # Filter out DOB / Gender type lines
-                if not re.search(r"\d{2}[\/\-]\d{2}[\/\-]\d{4}", candidate) and not re.search(r"(Male|Female)", candidate, re.IGNORECASE):
-                    name = candidate
-            break
-    print("dob:", dob)
-    print(gender)
-    print("Adhaar:", adhaar_no)
-    print("name:", name)
-    if dob == None or gender == None or adhaar_no == None or name == None:
-        return "error"
-    return {
-        "text": text,
-        "dob": dob.group(1) if dob else None,
-        "gender": gender.group() if gender else None,
-        "name": name, 
-        "AadharNo": adhaar_no.group() if adhaar_no else None
+    entities = ner_pipeline(text)
+    candidates = []
+    for ent in entities:
+        if ent['entity_group'] in ["PER", "PERSON"]:
+            candidate = re.sub(r"[^A-Za-z\s]", "", ent['word']).strip()
+            if len(candidate.split()) >= 2:
+                candidates.append(candidate)
+
+    if candidates:
+        name = max(candidates, key=len)
+
+    if not name:
+        for i, line in enumerate(lines):
+            if "dob" in line.lower() or "date of birth" in line.lower():
+                if i > 0:
+                    possible_name = re.sub(r"[^A-Za-z\s]", "", lines[i - 1]).strip()
+                    if len(possible_name.split()) >= 2:
+                        name = possible_name
+                        break
+
+    if name:
+        name = re.sub(r"\s+", " ", name).strip()  
+        name = re.sub(r"[^A-Za-z\s]", "", name).strip()
+
+    dob = re.search(r"\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b", text)
+
+    gender = None
+    if re.search(r"\bmale\b", text, re.IGNORECASE):
+        gender = "Male"
+    elif re.search(r"\bfemale\b", text, re.IGNORECASE):
+        gender = "Female"
+
+    # --- Extract Aadhaar Number (STRICT 12-digit only) ---
+    # aadhaar_no = None
+    # aadhaar_match = re.findall(r"\b\d{12}\b", text.replace(" ", ""))
+    # if aadhaar_match:
+    #     aadhaar_no = aadhaar_match[0]
+
+    # --- Extract Aadhaar Number (STRICT 12-digit only) ---
+    aadhaar_no = None
+    aadhaar_match = re.findall(r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b", text)
+    if aadhaar_match:
+        aadhaar_no = re.sub(r"\D", "", aadhaar_match[0])
+
+
+    print("===== Extracted Aadhaar Fields =====")
+    result = {
+        "name": name,
+        "dob": dob.group() if dob else None,
+        "gender": gender,
+        "AadharNo": aadhaar_no
     }
+    print(result)
+    print("===================================")
 
+    return result
 
-
-# def panCard_text(text: str):
-#     dob = re.search(r"\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b", text)
-#     pan_no = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])", text, re.IGNORECASE)
-
-#     print("dob:",dob)
-#     print("pan no:", pan_no)
-#     if dob == None or pan_no == None:
-#         return "error"
-#     return {
-#         "dob": dob.group() if dob else None,
-#         "pan no": pan_no.group() if pan_no else None
-#     }
