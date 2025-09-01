@@ -9,13 +9,16 @@ def imageToString(uploadFile: UploadFile, doc: str):
     im = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     # im = cv2.imread(uploadFile)
     gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-    # cid = uploadImageIPFS(uploadFile)
-    binary_image = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    binary_image = cv2.threshold(gray, 125, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
     cv2.imwrite('temp_image.png', binary_image)
     text = image_to_string(binary_image, lang="eng+kan+hin")
     print(text)
-    if(doc == 'Aadhar Card'):
+    if doc == 'Aadhar Card' :
         return aadhar_text(text)
+    if doc == "Pan Card" :
+       return panCard_text(text)
+    if doc == "Driver's License":
+        return DL_text(text)
     
 
 def aadhar_text(text: str):
@@ -48,15 +51,27 @@ def aadhar_text(text: str):
 
 
 
-# def panCard_text(text: str):
-#     dob = re.search(r"\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b", text)
-#     pan_no = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])", text, re.IGNORECASE)
+def panCard_text(text: str):
+    dob = re.search(r"\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b", text)
+    pan_no = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])", text, re.IGNORECASE)
 
-#     print("dob:",dob)
-#     print("pan no:", pan_no)
-#     if dob == None or pan_no == None:
-#         return "error"
-#     return {
-#         "dob": dob.group() if dob else None,
-#         "pan no": pan_no.group() if pan_no else None
-#     }
+    print("dob:",dob)
+    print("pan no:", pan_no)
+    if dob == None or pan_no == None:
+        return "error"
+    return {
+        "dob": dob.group() if dob else None,
+        "pan no": pan_no.group() if pan_no else None
+    }
+
+def DL_text(text: str):
+    name = re.search(r"NAME\s*:?\s*([A-Z\s]+)", text)
+    dob = re.search(r"D\.?O\.?B\s*:?\s*(\d{2}[/-]\d{2}[/-]\d{4})", text)
+    print("name:", name)
+    print("dob:", dob)
+    if dob == None or name == None:
+        return "error"
+    return {
+        "name": name.group(1) if name else None,
+        "dob": dob.group(1) if dob else None,
+    }
