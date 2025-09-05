@@ -40,6 +40,8 @@ def imageToString(uploadFile: UploadFile, doc: str):
 
     if doc.lower() == 'aadhar card':
         return aadhar_text(text)
+    elif(doc == 'Pan Card'):
+        return panCard_text(text)
 
 
 def aadhar_text(text: str):
@@ -99,4 +101,52 @@ def aadhar_text(text: str):
     print(result)
     print("===================================")
 
+    return result
+
+def panCard_text(text: str):
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    name = None
+    entities = ner_pipeline(text)
+    candidates = []
+    for ent in entities:
+        if ent['entity_group'] in ["PER", "PERSON"]:
+            candidate = re.sub(r"[^A-Za-z\s]", "", ent['word']).strip()
+            if len(candidate.split()) >= 2:
+                candidates.append(candidate)
+
+    if candidates:
+        # Pick longest name candidate
+        name = max(candidates, key=len)
+
+    dob = re.search(r"\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b", text)
+
+    if not name:
+        for i, line in enumerate(lines):
+            if dob.group() in line.lower():
+                for offset in [1, 2]:  # check 1 above, then 2 above
+                    if i - offset >= 0:
+                        possible_name = re.sub(r"[^A-Za-z\s]", "", lines[i - offset]).strip()
+                        if len(possible_name.split()) >= 2:
+                            name = possible_name
+                            
+                if name:
+                    break
+
+    if name:
+        name = re.sub(r"\s+", " ", name).strip()
+        name = re.sub(r"[^A-Za-z\s]", "", name).strip()
+
+    pan_no = None
+    pan_match = re.search(r"\b([A-Z]{5}[0-9]{4}[A-Z])", text, re.IGNORECASE)
+    if pan_match:
+        pan_no = pan_match.group()
+        
+    print("===== Extracted Pan Crad Fields =====")
+    result = {
+        "name": name,
+        "dob": dob.group() if dob else None,
+        "Pan": pan_no,
+    }
+    print(result)
+    print("===================================")
     return result
