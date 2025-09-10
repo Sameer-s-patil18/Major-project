@@ -89,18 +89,9 @@ async def auth(wallet: str, image: UploadFile = File(...)):
         raise HTTPException(status_code=422, detail="Invalid image content")
 
     # Step 1: Run liveness detection
-    faces = DeepFace.extract_faces(
-        img_path=image_bgr,
-        enforce_detection=True,
-        detector_backend='retinaface',
-        anti_spoofing=True
-    )
-    if not faces:
-        return AuthResponse(user_id=None, score=0.0, passed=False, message="No face detected")
 
-    face = faces[0]
-    is_live = face.get('is_real', False)
-    if not is_live:
+    liveness_result = pipeline.check_liveness_from_bgr(image_bgr)
+    if not liveness_result["is_live"]:
         return AuthResponse(user_id=None, score=0.0, passed=False, message="Liveness check failed: Spoof detected")
 
     # Step 2: Proceed with embedding extraction and authentication
