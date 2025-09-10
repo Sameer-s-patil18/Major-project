@@ -71,6 +71,17 @@ export default function FaceAuth({ wallet, onAuthed, onWantEnroll }) {
         color: "orange"
       };
     }
+
+    if (message.includes("liveness")) {
+      return {
+        type: "warning",
+        title: "Liveness Check Failed",
+        message: "Please ensure you are using a real, live image of yourself and try again.",
+        icon: AlertTriangle,
+        color: "orange"
+      };
+    }
+
     
     if (message.includes("not enrolled")) {
       return {

@@ -1,8 +1,10 @@
 from typing import Optional
+from fastapi import HTTPException
 import numpy as np
 import torch
 from PIL import Image
 import cv2
+from deepface import DeepFace
 from facenet_pytorch import MTCNN, InceptionResnetV1
 
 class FacePipeline:
@@ -42,3 +44,41 @@ class FacePipeline:
             return None
         emb = self.embed(aligned)
         return emb
+    
+    def check_liveness_from_bgr(self, image_bgr: np.ndarray, enforce_detection=True) -> dict:
+        """
+        Run DeepFace anti-spoofing liveness detection on a BGR image.
+        Returns dict with keys: 'is_live' (bool), 'confidence' (float).
+        Raises HTTPException on errors if enforce_detection=True.
+        """
+        if image_bgr is None:
+            raise HTTPException(status_code=422, detail="Invalid image content")
+
+        # Convert BGR to RGB as DeepFace expects RGB numpy array
+        image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+
+        try:
+            faces = DeepFace.extract_faces(
+                img_path=image_rgb,
+                enforce_detection=enforce_detection,
+                detector_backend='retinaface',
+                anti_spoofing=True
+            )
+        except ValueError as e:
+            if enforce_detection:
+                raise HTTPException(status_code=422, detail=str(e))
+            else:
+                return {"is_live": False, "confidence": 0.0}
+
+        if not faces:
+            if enforce_detection:
+                raise HTTPException(status_code=422, detail="No faces detected")
+            else:
+                return {"is_live": False, "confidence": 0.0}
+
+        face = faces[0]
+        is_live = face.get('is_real', False)
+        confidence = face.get('confidence', 0.0)
+
+        return {"is_live": is_live, "confidence": confidence}
+

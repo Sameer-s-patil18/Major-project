@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import numpy as np
 from fastapi import HTTPException
+from deepface import DeepFace
+import cv2
 
 from app.imageParser import imageToString
 from app.fileUpload import uploadImageIPFS
@@ -73,20 +75,38 @@ async def enroll(wallet: str, image: UploadFile = File(...)):
         message="Enrollment successful and on-chain commitment written"
     )
 
-
 @app.post("/auth", response_model=AuthResponse)
 async def auth(wallet: str, image: UploadFile = File(...)):
     wallet = validate_wallet(wallet)
+
     if image.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(status_code=400, detail="Only JPEG/PNG supported")
 
     image_bytes = await image.read()
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    image_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if image_bgr is None:
+        raise HTTPException(status_code=422, detail="Invalid image content")
+
+    # Step 1: Run liveness detection
+    faces = DeepFace.extract_faces(
+        img_path=image_bgr,
+        enforce_detection=True,
+        detector_backend='retinaface',
+        anti_spoofing=True
+    )
+    if not faces:
+        return AuthResponse(user_id=None, score=0.0, passed=False, message="No face detected")
+
+    face = faces[0]
+    is_live = face.get('is_real', False)
+    if not is_live:
+        return AuthResponse(user_id=None, score=0.0, passed=False, message="Liveness check failed: Spoof detected")
+
+    # Step 2: Proceed with embedding extraction and authentication
     emb = pipeline.image_to_embedding(image_bytes)
     if emb is None:
         return AuthResponse(user_id=None, score=0.0, passed=False, message="No face detected")
-
-    # Optional: check raw norm
-    # print("Raw embed norm (auth):", float(np.linalg.norm(emb)))
 
     matched_user, score = store.search(emb, k=1)
 
@@ -97,9 +117,6 @@ async def auth(wallet: str, image: UploadFile = File(...)):
     if rec and passed and rec["user_id"] != matched_user:
         passed = False
         message = "Face matches another enrolled user"
-
-    # Optional: ensure score is within [-1,1] if cosine is active
-    # print("Score (cosine):", score)
 
     return AuthResponse(user_id=matched_user, score=score, passed=passed, message=message)
 
