@@ -5,7 +5,6 @@ import { FileText, Camera, ArrowLeft, CheckCircle, XCircle, AlertTriangle, UserX
 
 export default function FaceAuth({ wallet, onAuthed, onWantEnroll }) {
   const [result, setResult] = useState(null);
-  const [mode, setMode] = useState("file");
   const [busy, setBusy] = useState(false);
 
   const doAuth = async (blob) => {
@@ -19,12 +18,6 @@ export default function FaceAuth({ wallet, onAuthed, onWantEnroll }) {
     } finally {
       setBusy(false);
     }
-  };
-
-  const onFile = async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    await doAuth(f);
   };
 
   const getAuthMessage = (result) => {
@@ -112,52 +105,7 @@ export default function FaceAuth({ wallet, onAuthed, onWantEnroll }) {
         <p className="text-gray-600">Choose your preferred authentication method</p>
       </div>
 
-      <div className="flex justify-center mb-8">
-        <div className="bg-gray-100 p-1 rounded-xl flex space-x-1">
-          <button 
-            onClick={() => setMode("file")}
-            className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
-              mode === "file" 
-                ? "bg-white text-blue-600 shadow-sm" 
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Upload File</span>
-          </button>
-          <button 
-            onClick={() => setMode("camera")}
-            className={`px-6 py-2 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
-              mode === "camera" 
-                ? "bg-white text-blue-600 shadow-sm" 
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <Camera className="w-4 h-4" />
-            <span>Use Camera</span>
-          </button>
-        </div>
-      </div>
-
-      {mode === "file" && (
-        <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition-colors duration-200">
-          <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <label className="cursor-pointer">
-            <span className="text-lg font-medium text-gray-700 hover:text-blue-600">
-              Click to upload an image
-            </span>
-            <input 
-              type="file" 
-              accept="image/*" 
-              onChange={onFile}
-              className="hidden"
-            />
-          </label>
-          <p className="text-sm text-gray-500 mt-2">PNG, JPG, GIF up to 10MB</p>
-        </div>
-      )}
-
-      {mode === "camera" && <CameraCapture onCapture={doAuth} auto={true} />}
+      <CameraCapture onCapture={doAuth} auto={true} />
 
       {busy && (
         <div className="text-center py-8">

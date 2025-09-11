@@ -41,6 +41,15 @@ async def enroll(wallet: str, image: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Only JPEG/PNG supported")
 
     image_bytes = await image.read()
+    nparr = np.frombuffer(image_bytes, np.uint8)
+    image_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if image_bgr is None:
+        raise HTTPException(status_code=422, detail="Invalid image content")
+    
+    liveness_result = pipeline.check_liveness_from_bgr(image_bgr)
+    if not liveness_result["is_live"]:
+        raise HTTPException(status_code=422, detail="Liveness check failed: Spoof detected")
+
     emb = pipeline.image_to_embedding(image_bytes)
     if emb is None:
         raise HTTPException(status_code=422, detail="No face detected")

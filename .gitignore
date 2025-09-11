@@ -69,7 +69,7 @@ frontend/.env.*
 !frontend/.env.example
 
 #myenv
-backend/myenv
+backend/env
 backend/temp_image.png
 
 # --- OS / Editor junk ---

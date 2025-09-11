@@ -4,7 +4,7 @@ import { Camera, RotateCcw, X } from "lucide-react";
 export default function CameraCapture({
   onCapture,
   facingMode = "user",
-  auto = true,
+  auto = false,
   autoDelayMs = 3000,
 }) {
   const videoRef = useRef(null);
