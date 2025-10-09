@@ -113,6 +113,7 @@ export default function DocumentsPanel({ wallet }) {
                   <option value="Driver's License" />
                   <option value="Aadhar Card" />
                   <option value="Pan Card" />
+                  <option value = "Voter ID" />
                   <option value="other" />
                 </datalist>
               <input

@@ -15,14 +15,6 @@ from app.face_pipeline import FacePipeline
 from app.storage import VectorStore
 from app.utils.hashing import build_commitment
 from app.blockchain.service import set_commitment as onchain_set, get_commitment as onchain_get
-import tensorflow as tf
-import torch
-print(torch.cuda.is_available())
-print(tf.test.is_gpu_available(cuda_only=False)) # True if GPU + cuDNN available
-
-
-print("tensorflow  \n", tf.__version__, " \n", tf.test.is_built_with_cuda(), tf.config.list_physical_devices("GPU"))
-
 
 load_dotenv()
 SIM_THRESHOLD = float(os.getenv("SIM_THRESHOLD", "0.6"))
