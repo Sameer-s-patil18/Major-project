@@ -198,8 +198,6 @@ MIT License
 - **EasyOCR** for OCR capabilities
 - **IPFS** for decentralized storage
 - **Ethereum** for blockchain infrastructure
-
 ---
-
 ```
 
