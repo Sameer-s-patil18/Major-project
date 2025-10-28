@@ -19,7 +19,7 @@ from app.blockchain.identity_docs.service import (
     get_identity_commitment,
     verify_identity_commitment
 )
-
+from app.document_storage import doc_store
 load_dotenv()
 SIM_THRESHOLD = float(os.getenv("SIM_THRESHOLD", "0.6"))
 
@@ -172,34 +172,96 @@ def binding(wallet: str):
 
 # ==================== IDENTITY DOCUMENT ROUTES ====================
 
+# @app.post("/identity/upload")
+# async def upload_document(
+#     wallet: str = Form(...),
+#     document: str = Form(...),
+#     image: UploadFile = File(...)
+# ):
+#     """
+#     Upload identity document (Aadhaar/PAN/DL/Voter ID), 
+#     extract data via OCR, upload to IPFS, and commit to blockchain.
+    
+#     Args:
+#         wallet: Ethereum wallet address
+#         document: Document type (e.g., 'aadhar card', 'Pan Card', etc.)
+#         image: Uploaded document image
+#     """
+#     wallet = validate_wallet(wallet)
+    
+#     if image.content_type not in ("image/jpeg", "image/png"):
+#         raise HTTPException(status_code=400, detail="Only JPEG/PNG supported")
+    
+#     try:
+#         # Step 1: Extract document data using OCR
+#         extracted_data = imageToString(image, document)
+        
+#         if not extracted_data:
+#             raise HTTPException(status_code=422, detail="Failed to extract data from document")
+        
+#         # Step 2: Upload to IPFS (encrypted)
+#         ipfs_result = upload_identity_document(
+#             extracted_data=extracted_data,
+#             doc_type=document,
+#             wallet_address=wallet
+#         )
+        
+#         ipfs_cid = ipfs_result["ipfs_cid"]
+        
+#         # Step 3: Commit IPFS CID hash to blockchain
+#         blockchain_result = set_identity_commitment(ipfs_cid)
+        
+#         if blockchain_result["success"]:
+#             return {
+#                 "status": "success",
+#                 "message": "Document processed, uploaded to IPFS, and committed to blockchain",
+#                 "wallet": wallet,
+#                 "document_type": document,
+#                 "extracted_data": extracted_data,
+#                 "ipfs": {
+#                     "cid": ipfs_cid,
+#                     "encrypted": True
+#                 },
+#                 "blockchain": {
+#                     "transaction_hash": blockchain_result["transaction_hash"],
+#                     "block_number": blockchain_result["block_number"],
+#                     "gas_used": blockchain_result["gas_used"],
+#                     "commitment_hash": blockchain_result["commitment_hash"]
+#                 }
+#             }
+#         else:
+#             # Partial success: uploaded to IPFS but blockchain failed
+#             return {
+#                 "status": "partial_success",
+#                 "message": "Document uploaded to IPFS but blockchain commitment failed",
+#                 "wallet": wallet,
+#                 "extracted_data": extracted_data,
+#                 "ipfs_cid": ipfs_cid,
+#                 "blockchain_error": blockchain_result["error"]
+#             }
+    
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 @app.post("/identity/upload")
 async def upload_document(
     wallet: str = Form(...),
     document: str = Form(...),
     image: UploadFile = File(...)
 ):
-    """
-    Upload identity document (Aadhaar/PAN/DL/Voter ID), 
-    extract data via OCR, upload to IPFS, and commit to blockchain.
-    
-    Args:
-        wallet: Ethereum wallet address
-        document: Document type (e.g., 'aadhar card', 'Pan Card', etc.)
-        image: Uploaded document image
-    """
+    """Upload identity document, extract data, upload to IPFS, and commit to blockchain."""
     wallet = validate_wallet(wallet)
     
     if image.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(status_code=400, detail="Only JPEG/PNG supported")
     
     try:
-        # Step 1: Extract document data using OCR
+        # Extract data
         extracted_data = imageToString(image, document)
         
         if not extracted_data:
             raise HTTPException(status_code=422, detail="Failed to extract data from document")
         
-        # Step 2: Upload to IPFS (encrypted)
+        # Upload to IPFS
         ipfs_result = upload_identity_document(
             extracted_data=extracted_data,
             doc_type=document,
@@ -208,10 +270,19 @@ async def upload_document(
         
         ipfs_cid = ipfs_result["ipfs_cid"]
         
-        # Step 3: Commit IPFS CID hash to blockchain
+        # Commit to blockchain
         blockchain_result = set_identity_commitment(ipfs_cid)
         
         if blockchain_result["success"]:
+            # ✅ NEW: Store document reference
+            doc_store.add_document(wallet, {
+                "ipfs_cid": ipfs_cid,
+                "document_type": document,
+                "timestamp": ipfs_result["metadata"]["timestamp"],
+                "transaction_hash": blockchain_result["transaction_hash"],
+                "block_number": blockchain_result["block_number"]
+            })
+            
             return {
                 "status": "success",
                 "message": "Document processed, uploaded to IPFS, and committed to blockchain",
@@ -230,7 +301,6 @@ async def upload_document(
                 }
             }
         else:
-            # Partial success: uploaded to IPFS but blockchain failed
             return {
                 "status": "partial_success",
                 "message": "Document uploaded to IPFS but blockchain commitment failed",
@@ -242,7 +312,6 @@ async def upload_document(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
 
 @app.get("/identity/verify/{ipfs_cid}")
 async def verify_document(ipfs_cid: str):
@@ -360,3 +429,65 @@ def root():
             "health": "GET /health"
         }
     }
+
+@app.get("/identity/documents/{wallet}")
+async def get_wallet_documents(wallet: str):
+    """
+    Get all documents for a wallet.
+    Returns list of document metadata (CIDs, types, timestamps).
+    """
+    wallet = validate_wallet(wallet)
+    
+    try:
+        documents = doc_store.get_documents(wallet)
+        
+        return {
+            "wallet": wallet,
+            "document_count": len(documents),
+            "documents": documents
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve documents: {str(e)}")
+
+
+@app.get("/identity/document/{ipfs_cid}/data")
+async def get_document_data(ipfs_cid: str):
+    """
+    Retrieve and decrypt full document data from IPFS.
+    """
+    try:
+        from app.fileUpload import fetch_json_from_ipfs
+        
+        document_data = fetch_json_from_ipfs(ipfs_cid)
+        
+        return {
+            "status": "success",
+            "ipfs_cid": ipfs_cid,
+            "document_data": document_data,
+            "message": "Document retrieved and decrypted successfully"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve document: {str(e)}")
+
+
+@app.delete("/identity/document/{ipfs_cid}")
+async def delete_document(ipfs_cid: str, wallet: str):
+    """
+    Remove document reference from storage (doesn't unpin from IPFS).
+    """
+    wallet = validate_wallet(wallet)
+    
+    try:
+        success = doc_store.remove_document(wallet, ipfs_cid)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": "Document reference removed",
+                "ipfs_cid": ipfs_cid
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Document not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
+

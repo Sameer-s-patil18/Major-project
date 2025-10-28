@@ -118,3 +118,38 @@ export async function checkHealth() {
   
   return res.json();
 }
+
+
+// ==================== DOCUMENT RETRIEVAL APIs ====================
+
+export async function getWalletDocuments(wallet) {
+  const res = await fetch(`${BACKEND_URL}/identity/documents/${wallet}`);
+  
+  if (!res.ok) {
+    throw new Error(`Failed to get documents: ${res.statusText}`);
+  }
+  
+  return res.json();
+}
+
+export async function getDocumentData(ipfsCid) {
+  const res = await fetch(`${BACKEND_URL}/identity/document/${ipfsCid}/data`);
+  
+  if (!res.ok) {
+    throw new Error(`Failed to retrieve document data: ${res.statusText}`);
+  }
+  
+  return res.json();
+}
+
+export async function deleteDocument(ipfsCid, wallet) {
+  const res = await fetch(`${BACKEND_URL}/identity/document/${ipfsCid}?wallet=${wallet}`, {
+    method: 'DELETE'
+  });
+  
+  if (!res.ok) {
+    throw new Error(`Failed to delete document: ${res.statusText}`);
+  }
+  
+  return res.json();
+}

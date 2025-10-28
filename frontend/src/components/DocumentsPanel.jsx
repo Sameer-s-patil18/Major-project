@@ -1,6 +1,6 @@
-import { FileText, Shield, CheckCircle, Download, Eye, X, Loader2 } from "lucide-react";
-import { useState } from "react";
-import { addDocument } from "../api";
+import { FileText, Shield, CheckCircle, Download, Eye, X, Loader2, ExternalLink, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { addDocument, getWalletDocuments, getDocumentData } from "../api";
 
 export default function DocumentsPanel({ wallet }) {
   const [addDoc, setAddDoc] = useState(false);
@@ -12,7 +12,52 @@ export default function DocumentsPanel({ wallet }) {
   const [loading, setLoading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
 
-  const getDocs = async () => {};
+  // ✅ NEW: Document viewing state
+  const [documents, setDocuments] = useState([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [viewingDocData, setViewingDocData] = useState(null);
+
+  // ✅ NEW: Load documents when view modal opens
+  useEffect(() => {
+    if (viewDoc && wallet) {
+      loadDocuments();
+    }
+  }, [viewDoc, wallet]);
+
+  const loadDocuments = async () => {
+    setLoadingDocs(true);
+    try {
+      const response = await getWalletDocuments(wallet);
+      setDocuments(response.documents || []);
+    } catch (err) {
+      console.error("Error loading documents:", err);
+      setDocuments([]);
+      setError(true);
+      setMsg(`Failed to load documents: ${err.message}`);
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  const viewDocumentData = async (ipfsCid, docType) => {
+    setLoadingDocs(true);
+    setSelectedDoc(ipfsCid);
+    try {
+      const response = await getDocumentData(ipfsCid);
+      setViewingDocData({
+        ...response.document_data,
+        ipfs_cid: ipfsCid,
+        doc_type: docType
+      });
+    } catch (err) {
+      console.error("Error viewing document:", err);
+      alert(`Failed to load document: ${err.message}`);
+      setSelectedDoc(null);
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
 
   async function addDocu() {
     // Validation
@@ -114,7 +159,7 @@ export default function DocumentsPanel({ wallet }) {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button 
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-200 flex items-center justify-center space-x-2"
-                onClick={() => {setViewDoc(!viewDoc); setAddDoc(false);}}
+                onClick={() => {setViewDoc(!viewDoc); setAddDoc(false); setViewingDocData(null);}}
               >
                 <Eye className="w-5 h-5" />
                 <span>View Documents</span>
@@ -307,27 +352,196 @@ export default function DocumentsPanel({ wallet }) {
           </div>
         )}
 
-        {/* View Documents Modal */}
+        {/* ✅ UPDATED: View Documents Modal with Full Functionality */}
         {viewDoc && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg relative">
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto relative">
               <button
-                onClick={() => setViewDoc(false)}
-                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+                onClick={() => {
+                  setViewDoc(false);
+                  setViewingDocData(null);
+                  setSelectedDoc(null);
+                }}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-10"
               >
                 <X className="w-6 h-6" />
               </button>
 
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Your Documents
-              </h2>
-              <p className="text-gray-600 mb-4">
-                Documents stored for wallet: {wallet?.slice(0, 6)}...{wallet?.slice(-4)}
-              </p>
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p>Document retrieval feature coming soon!</p>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Your Documents</h2>
+                  <p className="text-gray-600 mt-1">
+                    Wallet: {wallet?.slice(0, 6)}...{wallet?.slice(-4)}
+                  </p>
+                </div>
+                <button
+                  onClick={loadDocuments}
+                  className="flex items-center space-x-2 bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-lg transition-colors"
+                  disabled={loadingDocs}
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingDocs ? 'animate-spin' : ''}`} />
+                  <span>Refresh</span>
+                </button>
               </div>
+
+              {loadingDocs && !viewingDocData ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                  <span className="ml-3 text-gray-600">Loading documents...</span>
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                  <p className="text-gray-600 mb-2 font-semibold">No documents found</p>
+                  <p className="text-sm text-gray-500">Upload your first document to get started!</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {documents.map((doc, index) => (
+                    <div
+                      key={index}
+                      className={`border rounded-lg p-4 transition-all ${
+                        selectedDoc === doc.ipfs_cid
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:shadow-md'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-3">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                            <h3 className="font-semibold text-gray-900 capitalize">
+                              {doc.document_type}
+                            </h3>
+                          </div>
+                          
+                          <div className="text-sm text-gray-600 space-y-1.5">
+                            <p>
+                              <strong className="text-gray-700">Uploaded:</strong>{" "}
+                              {new Date(doc.timestamp).toLocaleString('en-IN', { 
+                                dateStyle: 'medium', 
+                                timeStyle: 'short' 
+                              })}
+                            </p>
+                            <p className="break-all">
+                              <strong className="text-gray-700">IPFS CID:</strong>{" "}
+                              <code className="bg-gray-100 px-2 py-0.5 rounded text-xs">
+                                {doc.ipfs_cid}
+                              </code>
+                            </p>
+                            <p className="break-all">
+                              <strong className="text-gray-700">TX Hash:</strong>{" "}
+                              <a
+                                href={`https://sepolia.etherscan.io/tx/0x${doc.transaction_hash}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline inline-flex items-center"
+                              >
+                                {doc.transaction_hash.slice(0, 10)}...
+                                {doc.transaction_hash.slice(-8)}
+                                <ExternalLink className="w-3 h-3 ml-1" />
+                              </a>
+                            </p>
+                            <p>
+                              <strong className="text-gray-700">Block:</strong> {doc.block_number}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => viewDocumentData(doc.ipfs_cid, doc.document_type)}
+                          disabled={loadingDocs && selectedDoc === doc.ipfs_cid}
+                          className="ml-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition-colors"
+                        >
+                          {loadingDocs && selectedDoc === doc.ipfs_cid ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Loading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-4 h-4" />
+                              <span>View Data</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ✅ NEW: Document Data Viewer */}
+              {viewingDocData && (
+                <div className="mt-6 border-t-2 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">
+                      📄 Document Details
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setViewingDocData(null);
+                        setSelectedDoc(null);
+                      }}
+                      className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+                    >
+                      Close Details
+                    </button>
+                  </div>
+                  
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-5 space-y-5">
+                    <div className="bg-white rounded-lg p-4 shadow-sm">
+                      <h4 className="font-semibold text-gray-900 mb-2 flex items-center">
+                        <FileText className="w-4 h-4 mr-2 text-blue-600" />
+                        Document Type
+                      </h4>
+                      <p className="text-gray-900 capitalize font-medium">
+                        {viewingDocData.document_type}
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-lg p-4 shadow-sm">
+                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+                        <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                        Extracted Data
+                      </h4>
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <pre className="text-sm text-gray-900 whitespace-pre-wrap font-mono">
+                          {JSON.stringify(viewingDocData.extracted_data, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg p-4 shadow-sm">
+                      <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+                        <Shield className="w-4 h-4 mr-2 text-purple-600" />
+                        Metadata
+                      </h4>
+                      <div className="text-sm space-y-2">
+                        <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                          <span className="text-gray-600 font-medium">Timestamp:</span>
+                          <span className="text-gray-900">
+                            {new Date(viewingDocData.timestamp).toLocaleString('en-IN', {
+                              dateStyle: 'full',
+                              timeStyle: 'short'
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                          <span className="text-gray-600 font-medium">Version:</span>
+                          <span className="text-gray-900">{viewingDocData.version}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2">
+                          <span className="text-gray-600 font-medium">Encryption:</span>
+                          <span className={viewingDocData.encrypted ? "text-green-600 font-semibold" : "text-red-600"}>
+                            {viewingDocData.encrypted ? "✅ Encrypted" : "❌ Not encrypted"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
