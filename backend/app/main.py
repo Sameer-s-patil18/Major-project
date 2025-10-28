@@ -7,9 +7,10 @@ import numpy as np
 from fastapi import HTTPException
 from deepface import DeepFace
 import cv2
+# import torch
 
 from app.imageParser import imageToString
-from app.fileUpload import uploadImageIPFS
+# from app.fileUpload import uploadImageIPFS
 from app.models import EnrollResponse, AuthResponse
 from app.face_pipeline import FacePipeline
 from app.storage import VectorStore
@@ -24,8 +25,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
-
-pipeline = FacePipeline(device="cuda")
+# device = "mps" if torch.backends.mps.is_available() else "cpu"
+pipeline = FacePipeline(device="cpu")
 store = VectorStore(dim=512, use_cosine=True)
 def validate_wallet(addr: str) -> str:
     if not isinstance(addr, str) or not addr.startswith("0x") or len(addr) != 42:

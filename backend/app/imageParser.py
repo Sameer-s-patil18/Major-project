@@ -26,40 +26,66 @@ ner_pipeline = pipeline(
 # Load EasyOCR reader (English + Kannada)
 reader = easyocr.Reader(['en', 'kn'])
 
+# def imageToString(uploadFile: UploadFile, doc: str):
+#     file_bytes = np.frombuffer(uploadFile.file.read(), np.uint8)
+#     im = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+#     # decoded = pyzbar.decode(im)
+#     # print(decoded)
+#     # raw_data = decoded[0].data.decode("utf-8")
+#     # print(raw_data)
+#     # paresed = None
+#     # if raw_data.strip().startswith("<"):
+#     #     parsed = text
+    
+#     # parsed = json.loads(base64.b64decode(raw_data))
+#     # print(parsed)
+
+
+#     # try:
+#     #     decompressed = zlib.decompress(raw_data, 16+zlib.MAX_WBITS)
+#     #     xml_data = decompressed.decode('utf-8')
+#     #     root = ET.fromstring(xml_data)
+#     #     print(root.attrib)
+#     # except Exception as e:
+#     #     print("Error:", e)
+
+#     # ===== PREPROCESSING =====
+#     im = cv2.resize(im, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
+#     gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+#     gray = cv2.bilateralFilter(gray, 11, 17, 17)
+
+#     # --- Increase contrast (CLAHE) ---
+#     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+#     gray = clahe.apply(gray)
+
+#     gray = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
+
+#     # ===== OCR with EasyOCR =====
+#     results = reader.readtext(gray, detail=0)
+#     text = "\n".join(results)
+
+#     print("===== RAW OCR TEXT =====")
+#     print(text)
+#     print("========================")
+
+#     if doc.lower() == 'aadhar card':
+#         return aadhar_text(text)
+#     elif(doc == 'Pan Card'):
+#         return panCard_text(text)
+#     elif(doc == "Driver's License"):
+#         return DL_text(text)
+#     elif(doc == "Voter ID"):
+#         return voterID_text(text)
+
 def imageToString(uploadFile: UploadFile, doc: str):
     file_bytes = np.frombuffer(uploadFile.file.read(), np.uint8)
     im = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-
-    decoded = pyzbar.decode(im)
-    print(decoded)
-    raw_data = decoded[0].data.decode("utf-8")
-    print(raw_data)
-    paresed = None
-    if raw_data.strip().startswith("<"):
-        parsed = text
-    
-    parsed = json.loads(base64.b64decode(raw_data))
-    print(parsed)
-
-
-    # try:
-    #     decompressed = zlib.decompress(raw_data, 16+zlib.MAX_WBITS)
-    #     xml_data = decompressed.decode('utf-8')
-    #     root = ET.fromstring(xml_data)
-    #     print(root.attrib)
-    # except Exception as e:
-    #     print("Error:", e)
 
     # ===== PREPROCESSING =====
     im = cv2.resize(im, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
     gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
-
-    # --- Increase contrast (CLAHE) ---
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-    gray = clahe.apply(gray)
-
-    gray = cv2.convertScaleAbs(gray, alpha=1.5, beta=0)
 
     # ===== OCR with EasyOCR =====
     results = reader.readtext(gray, detail=0)
@@ -73,10 +99,6 @@ def imageToString(uploadFile: UploadFile, doc: str):
         return aadhar_text(text)
     elif(doc == 'Pan Card'):
         return panCard_text(text)
-    elif(doc == "Driver's License"):
-        return DL_text(text)
-    elif(doc == "Voter ID"):
-        return voterID_text(text)
 
 
 def aadhar_text(text: str):
@@ -125,6 +147,11 @@ def aadhar_text(text: str):
     aadhaar_match = re.findall(r"\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b", text)
     if aadhaar_match:
         aadhaar_no = re.sub(r"\D", "", aadhaar_match[0])
+
+    # aadhaar_no = None
+    # aadhaar_match = re.findall(r"\b\d{12}\b", text.replace(" ", ""))
+    # if aadhaar_match:
+    #     aadhaar_no = aadhaar_match[0]
 
     print("===== Extracted Aadhaar Fields =====")
     result = {
@@ -281,7 +308,7 @@ def voterID_text(text: str):
 
     print("-------------------------------------------------------------------------------------")
 
-    print("Ectracted Details:\n", result)
+    print("Extracted Details:\n", result)
 
     print("-------------------------------------------------------------------------------------")
 
