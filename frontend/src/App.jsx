@@ -43,7 +43,7 @@ function App() {
               <div className="bg-blue-600 w-8 h-8 rounded-lg flex items-center justify-center">
                 <Wallet className="w-5 h-5 text-white" />
               </div>
-              <span>Face Auth Flow</span>
+              <span>Decentralized Identity Verification System</span>
             </h1>
             {wallet && (
               <div className="text-sm text-gray-600">
