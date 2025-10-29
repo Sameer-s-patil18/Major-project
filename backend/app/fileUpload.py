@@ -45,7 +45,6 @@ def upload_json_to_ipfs(data: dict) -> str:
     res = ipfs_client.add(filelike, pin=True)
     return res["Hash"]
 
-
 {
 # def encrypt_file(data: bytes) -> bytes:
 #     aesgcm = AESGCM(AES_KEY)

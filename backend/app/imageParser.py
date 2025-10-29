@@ -30,27 +30,29 @@ def imageToString(uploadFile: UploadFile, doc: str):
     file_bytes = np.frombuffer(uploadFile.file.read(), np.uint8)
     im = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    decoded = pyzbar.decode(im)
-    print(decoded)
-    raw_data = decoded[0].data.decode("utf-8")
-    print(raw_data)
-    paresed = None
-    if raw_data.strip().startswith("<"):
-        parsed = text
+   #{ # decoded = pyzbar.decode(im)
+    # print(decoded)
+    # raw_data = decoded[0].data.decode("utf-8")
+    # print(raw_data)
+    # paresed = None
+    # if raw_data.strip().startswith("<"):
+    #     parsed = text
     
-    parsed = json.loads(base64.b64decode(raw_data))
-    print(parsed)
+    # parsed = json.loads(base64.b64decode(raw_data))
+    # print(parsed)
 
 
-    # try:
-    #     decompressed = zlib.decompress(raw_data, 16+zlib.MAX_WBITS)
-    #     xml_data = decompressed.decode('utf-8')
-    #     root = ET.fromstring(xml_data)
-    #     print(root.attrib)
-    # except Exception as e:
-    #     print("Error:", e)
+    # # try:
+    # #     decompressed = zlib.decompress(raw_data, 16+zlib.MAX_WBITS)
+    # #     xml_data = decompressed.decode('utf-8')
+    # #     root = ET.fromstring(xml_data)
+    # #     print(root.attrib)
+    # # except Exception as e:
+    # #     print("Error:", e)
+    #}
 
     # ===== PREPROCESSING =====
+    
     im = cv2.resize(im, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
     gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
     gray = cv2.bilateralFilter(gray, 11, 17, 17)
