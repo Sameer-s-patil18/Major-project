@@ -153,3 +153,76 @@ export async function deleteDocument(ipfsCid, wallet) {
   
   return res.json();
 }
+
+// ==================== MFA EMAIL OTP APIs ====================
+
+export async function requestEmailOTP(wallet) {
+  const fd = new FormData();
+  fd.append("wallet", wallet);
+  
+  const res = await fetch(`${BACKEND_URL}/mfa/email/request`, {
+    method: "POST",
+    body: fd,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to send OTP: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+export async function verifyEmailOTP(wallet, otp) {
+  const fd = new FormData();
+  fd.append("wallet", wallet);
+  fd.append("otp", otp);
+  
+  const res = await fetch(`${BACKEND_URL}/mfa/email/verify`, {
+    method: "POST",
+    body: fd,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to verify OTP: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+// ==================== EMAIL ENROLLMENT APIs ====================
+
+export async function sendEmailVerification(wallet, email) {
+  const fd = new FormData();
+  fd.append("wallet", wallet);
+  fd.append("email", email);
+
+  const res = await fetch(`${BACKEND_URL}/enroll/email`, {
+    method: "POST",
+    body: fd,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to send verification email: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+
+export async function verifyEmailToken(wallet, email, token) {
+  const fd = new FormData();
+  fd.append("wallet", wallet);
+  fd.append("email", email);
+  fd.append("token", token);
+
+  const res = await fetch(`${BACKEND_URL}/enroll/email/verify`, {
+    method: "POST",
+    body: fd,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to verify email token: ${res.statusText}`);
+  }
+
+  return res.json();
+}
+

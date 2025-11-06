@@ -1,6 +1,6 @@
-import { FileText, Shield, CheckCircle, Download, Eye, X, Loader2, ExternalLink, RefreshCw } from "lucide-react";
+import { FileText, Shield, CheckCircle, Download, Eye, X, Loader2, ExternalLink, RefreshCw, Mail } from "lucide-react";
 import { useState, useEffect } from "react";
-import { addDocument, getWalletDocuments, getDocumentData } from "../api";
+import { addDocument, getWalletDocuments, getDocumentData, requestEmailOTP, verifyEmailOTP } from "../api";
 
 export default function DocumentsPanel({ wallet }) {
   const [addDoc, setAddDoc] = useState(false);
@@ -18,6 +18,15 @@ export default function DocumentsPanel({ wallet }) {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [viewingDocData, setViewingDocData] = useState(null);
 
+  // MFA state
+  const [otpModal, setOtpModal] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+
+
   // ✅ NEW: Load documents when view modal opens
   useEffect(() => {
     if (viewDoc && wallet) {
@@ -26,32 +35,57 @@ export default function DocumentsPanel({ wallet }) {
   }, [viewDoc, wallet]);
 
   const loadDocuments = async () => {
-    setLoadingDocs(true);
-    try {
-      const response = await getWalletDocuments(wallet);
-      setDocuments(response.documents || []);
-    } catch (err) {
-      console.error("Error loading documents:", err);
-      setDocuments([]);
-      setError(true);
-      setMsg(`Failed to load documents: ${err.message}`);
-    } finally {
-      setLoadingDocs(false);
-    }
-  };
+  setLoadingDocs(true);
+  try {
+    const response = await getWalletDocuments(wallet);
+    const allDocs = response.documents || [];
+
+    // ✅ Normalize & filter documents
+    const filteredDocs = allDocs
+      .map((d) => ({
+        document_type: d.document_type?.toLowerCase() || d.type?.toLowerCase(),
+        ipfs_cid: d.ipfs_cid || d.ipfs,
+        transaction_hash: d.transaction_hash || d.tx_hash || null,
+        block_number: d.block_number || d.block,
+        timestamp: d.timestamp || d.created_at,
+      }))
+      .filter(
+        (doc) =>
+          doc.document_type !== "verified_email" &&
+          doc.transaction_hash // only keep docs that have TX hash
+      );
+
+    setDocuments(filteredDocs);
+  } catch (err) {
+    console.error("Error loading documents:", err);
+    setDocuments([]);
+    setError(true);
+    setMsg(`Failed to load documents: ${err.message}`);
+  } finally {
+    setLoadingDocs(false);
+  }
+};
+
 
   const viewDocumentData = async (ipfsCid, docType) => {
     setLoadingDocs(true);
     setSelectedDoc(ipfsCid);
+
     try {
       const response = await getDocumentData(ipfsCid);
+
+      // ✅ handle both shapes: wrapped or direct
+      const data = response.document_data || response;
+
+      if (!data) throw new Error("Empty document data response");
+
       setViewingDocData({
-        ...response.document_data,
+        ...data,
         ipfs_cid: ipfsCid,
-        doc_type: docType
+        doc_type: docType,
       });
     } catch (err) {
-      console.error("Error viewing document:", err);
+      console.error("❌ Error viewing document:", err);
       alert(`Failed to load document: ${err.message}`);
       setSelectedDoc(null);
     } finally {
@@ -59,68 +93,45 @@ export default function DocumentsPanel({ wallet }) {
     }
   };
 
-  async function addDocu() {
-    // Validation
-    if (!docType) {
-      setError(true);
-      return setMsg("Please select a document type");
-    }
-    if (!file) {
-      setError(true);
-      return setMsg("Please select a file to upload");
-    }
-    if (!wallet) {
-      setError(true);
-      return setMsg("Please connect your wallet first");
-    }
 
-    setLoading(true);
-    setMsg(null);
-    setError(false);
+async function addDocu() {
+  // Validation
+  if (!docType) return setMsg("Please select a document type");
+  if (!file) return setMsg("Please select a file to upload");
+  if (!wallet) return setMsg("Please connect your wallet first");
 
-    try {
-      const response = await addDocument(wallet, docType, file);
-      
-      console.log("✅ Upload response:", response);
-
-      // Handle new response structure
-      if (response.status === "success") {
-        setUploadResult(response);
-        setMsg(null);
-        setError(false);
-        
-        // Success notification
-        alert(`✅ Document uploaded successfully!\n\nIPFS CID: ${response.ipfs.cid}\n\nTransaction Hash: ${response.blockchain.transaction_hash}`);
-        
-        // Reset form
-        setAddDoc(false);
-        setFile(null);
-        setDocType("");
-      } else if (response.status === "partial_success") {
-        setError(true);
-        setMsg(`Partial success: ${response.message}`);
-      } else {
-        setError(true);
-        setMsg("Upload failed. Please try again.");
-      }
-    } catch (err) {
-      console.error("❌ Upload error:", err);
-      setError(true);
-      
-      // Better error messages
-      if (err.message.includes("IPFS")) {
-        setMsg("IPFS upload error. Make sure IPFS daemon is running.");
-      } else if (err.message.includes("blockchain")) {
-        setMsg("Blockchain commit failed. Check your wallet and network.");
-      } else if (err.message.includes("Invalid image")) {
-        setMsg("Please upload a clear, close-up image of the document.");
-      } else {
-        setMsg(`Upload failed: ${err.message}`);
-      }
-    } finally {
-      setLoading(false);
-    }
+  if (!otpVerified) {
+    setOtpModal(true);
+    return; // block upload until OTP verified
   }
+
+  setLoading(true);
+  setMsg(null);
+  setError(false);
+
+  try {
+    const response = await addDocument(wallet, docType, file);
+    console.log("✅ Upload response:", response);
+
+    if (response.status === "success") {
+      setUploadResult(response);
+      alert(`✅ Document uploaded successfully!\n\nCID: ${response.ipfs.cid}`);
+      setAddDoc(false);
+      setFile(null);
+      setDocType("");
+      setOtpVerified(false); // reset MFA after successful upload
+    } else {
+      throw new Error(response.message || "Upload failed");
+    }
+  } catch (err) {
+    console.error("❌ Upload error:", err);
+    setError(true);
+    setMsg(err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
@@ -293,6 +304,89 @@ export default function DocumentsPanel({ wallet }) {
           </div>
         )}
 
+        {/* 🔐 OTP MFA Modal */}
+        {otpModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md relative">
+              <button
+                onClick={() => {
+                  setOtpModal(false);
+                  setOtp("");
+                  setOtpSent(false);
+                }}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Email Verification</h2>
+              <p className="text-gray-600 mb-6 text-sm">
+                Verify the OTP sent to your registered email to continue.
+              </p>
+
+              {!otpSent ? (
+                <button
+                  onClick={async () => {
+                    setSendingOtp(true);
+                    try {
+                      await requestEmailOTP(wallet);
+                      setOtpSent(true);
+                      alert("✅ OTP sent to your verified email!");
+                    } catch (err) {
+                      alert("❌ Failed to send OTP: " + err.message);
+                    } finally {
+                      setSendingOtp(false);
+                    }
+                  }}
+                  disabled={sendingOtp}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg flex items-center justify-center space-x-2"
+                >
+                  {sendingOtp ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Mail className="w-5 h-5" />
+                  )}
+                  <span>{sendingOtp ? "Sending..." : "Send OTP"}</span>
+                </button>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Enter OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    className="border border-gray-300 rounded-lg p-2 w-full mb-4"
+                  />
+                  <button
+                    onClick={async () => {
+                      setVerifyingOtp(true);
+                      try {
+                        await verifyEmailOTP(wallet, otp);
+                        setOtpVerified(true);
+                        setOtpModal(false);
+                        alert("✅ OTP verified successfully!");
+                      } catch (err) {
+                        alert("❌ Invalid OTP: " + err.message);
+                      } finally {
+                        setVerifyingOtp(false);
+                      }
+                    }}
+                    disabled={verifyingOtp}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg flex items-center justify-center space-x-2"
+                  >
+                    {verifyingOtp ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <CheckCircle className="w-5 h-5" />
+                    )}
+                    <span>{verifyingOtp ? "Verifying..." : "Verify OTP"}</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Success Modal */}
         {uploadResult && !error && (
           <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -351,6 +445,13 @@ export default function DocumentsPanel({ wallet }) {
             </div>
           </div>
         )}
+
+        {otpVerified && (
+            <div className="flex items-center text-green-600 text-sm mb-3">
+              <CheckCircle className="w-4 h-4 mr-1" /> MFA Verified
+            </div>
+          )}
+
 
         {/* ✅ UPDATED: View Documents Modal with Full Functionality */}
         {viewDoc && (
@@ -431,16 +532,20 @@ export default function DocumentsPanel({ wallet }) {
                             </p>
                             <p className="break-all">
                               <strong className="text-gray-700">TX Hash:</strong>{" "}
-                              <a
-                                href={`https://sepolia.etherscan.io/tx/0x${doc.transaction_hash}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:underline inline-flex items-center"
-                              >
-                                {doc.transaction_hash.slice(0, 10)}...
-                                {doc.transaction_hash.slice(-8)}
-                                <ExternalLink className="w-3 h-3 ml-1" />
-                              </a>
+                              {doc.transaction_hash ? (
+                                <a
+                                  href={`https://sepolia.etherscan.io/tx/0x${doc.transaction_hash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline inline-flex items-center"
+                                >
+                                  {doc.transaction_hash.slice(0, 10)}...
+                                  {doc.transaction_hash.slice(-8)}
+                                  <ExternalLink className="w-3 h-3 ml-1" />
+                                </a>
+                              ) : (
+                                <span className="text-gray-500 italic">Not available</span>
+                              )}
                             </p>
                             <p>
                               <strong className="text-gray-700">Block:</strong> {doc.block_number}
@@ -507,8 +612,10 @@ export default function DocumentsPanel({ wallet }) {
                       </h4>
                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <pre className="text-sm text-gray-900 whitespace-pre-wrap font-mono">
-                          {JSON.stringify(viewingDocData.extracted_data, null, 2)}
-                        </pre>
+                        {viewingDocData?.extracted_data
+                          ? JSON.stringify(viewingDocData.extracted_data, null, 2)
+                          : "No extracted data available."}
+                      </pre>
                       </div>
                     </div>
 

@@ -2,20 +2,27 @@ import { useState } from "react";
 import { enroll } from "../api";
 import CameraCapture from "./CameraCapture";
 import { FileText, Camera, ArrowLeft, CheckCircle, XCircle, Upload } from "lucide-react";
+import EmailVerifyStep from "./EmailVerifyStep";
 
 export default function EnrollPanel({ wallet, onEnrolled, onBack }) {
   const [res, setRes] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
 
   const doEnroll = async (blob) => {
     setBusy(true);
     try {
       const out = await enroll(wallet, blob);
       setRes(out);
-      onEnrolled?.(out);
+      // onEnrolled?.(out);
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleEmailVerified = () => {
+    setEmailVerified(true);
+    onEnrolled?.(res);
   };
 
   return (
@@ -36,30 +43,35 @@ export default function EnrollPanel({ wallet, onEnrolled, onBack }) {
 
       {res && (
         <div className={`mt-8 p-6 rounded-xl border-2 ${
-          res.success 
+          res.tx_hash 
             ? "bg-green-50 border-green-200" 
             : "bg-red-50 border-red-200"
         }`}>
           <div className="flex items-center space-x-3 mb-3">
-            {res.success ? (
+            {res.tx_hash ? (
               <CheckCircle className="w-6 h-6 text-green-600" />
             ) : (
               <XCircle className="w-6 h-6 text-red-600" />
             )}
             <h3 className={`text-lg font-semibold ${
-              res.success ? "text-green-800" : "text-red-800"
+              res.tx_hash ? "text-green-800" : "text-red-800"
             }`}>
-              {res.success ? "Enrollment Successful!" : "Enrollment Failed"}
+              {res.tx_hash ? "Enrollment Successful!" : "Enrollment Failed"}
             </h3>
           </div>
           <pre className={`text-sm p-3 rounded border overflow-auto ${
-            res.success 
+            res.tx_hash 
               ? "bg-white/50 text-green-800" 
               : "bg-white/50 text-red-800"
           }`}>
             {JSON.stringify(res, null, 2)}
           </pre>
         </div>
+      )}
+
+       {/* Email step after face enroll */}
+      {res?.tx_hash && !emailVerified && (
+        <EmailVerifyStep wallet={wallet} onVerified={handleEmailVerified} />
       )}
 
       <div className="flex justify-center mt-8">

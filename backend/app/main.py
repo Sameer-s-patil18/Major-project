@@ -20,6 +20,11 @@ from app.blockchain.identity_docs.service import (
     verify_identity_commitment
 )
 from app.document_storage import doc_store
+from app.mfa_email import (
+    send_verification_email, verify_enrollment_email,
+    send_action_otp, verify_action_otp
+)
+
 load_dotenv()
 SIM_THRESHOLD = float(os.getenv("SIM_THRESHOLD", "0.6"))
 
@@ -149,6 +154,17 @@ async def auth(wallet: str, image: UploadFile = File(...)):
         message=message
     )
 
+@app.post("/enroll/email")
+async def enroll_email(wallet: str = Form(...), email: str = Form(...)):
+    """Send email verification for enrollment."""
+    return send_verification_email(wallet, email)
+
+@app.post("/enroll/email/verify")
+async def verify_enroll_email(wallet: str = Form(...), email: str = Form(...), token: str = Form(...)):
+    """Verify user's email and save encrypted email."""
+    if verify_enrollment_email(wallet, email, token):
+        return {"status": "verified", "message": "Email successfully verified"}
+    raise HTTPException(status_code=400, detail="Email verification failed")
 
 @app.get("/onchain/{wallet}")
 def onchain(wallet: str):
@@ -170,7 +186,7 @@ def binding(wallet: str):
     return {"wallet": wallet, **rec}
 
 
-# ==================== IDENTITY DOCUMENT ROUTES ====================
+{# ==================== IDENTITY DOCUMENT ROUTES ====================
 
 # @app.post("/identity/upload")
 # async def upload_document(
@@ -242,6 +258,8 @@ def binding(wallet: str):
     
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+}
+
 @app.post("/identity/upload")
 async def upload_document(
     wallet: str = Form(...),
@@ -251,6 +269,13 @@ async def upload_document(
     """Upload identity document, extract data, upload to IPFS, and commit to blockchain."""
     wallet = validate_wallet(wallet)
     
+    # if not is_wallet_mfa_verified(wallet):
+    #     raise HTTPException(
+    #         status_code=403, 
+    #         detail="Email MFA not verified. Please verify your email first."
+    #     )
+
+
     if image.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(status_code=400, detail="Only JPEG/PNG supported")
     
@@ -491,3 +516,14 @@ async def delete_document(ipfs_cid: str, wallet: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
 
+@app.post("/mfa/email/request")
+async def request_action_otp(wallet: str = Form(...)):
+    """Send fresh OTP for this wallet every time."""
+    return send_action_otp(wallet)
+
+@app.post("/mfa/email/verify")
+async def verify_action(wallet: str = Form(...), otp: str = Form(...)):
+    """Verify OTP before performing sensitive action."""
+    if verify_action_otp(wallet, otp):
+        return {"status": "granted", "message": "OTP verified, action allowed"}
+    raise HTTPException(status_code=400, detail="Invalid OTP")
