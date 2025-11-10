@@ -217,8 +217,6 @@ async function addDocu() {
                 <option value="aadhar card">Aadhaar Card</option>
                 <option value="Pan Card">PAN Card</option>
                 <option value="Driver's License">Driver's License</option>
-                <option value="Voter ID">Voter ID</option>
-                <option value="Passport">Passport</option>
               </select>
 
               <input

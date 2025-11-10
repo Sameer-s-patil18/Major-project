@@ -100,6 +100,8 @@ def imageToString(uploadFile: UploadFile, doc: str):
         return aadhar_text(text)
     elif(doc == 'Pan Card'):
         return panCard_text(text)
+    elif(doc == "Driver's License"):
+        return DL_text(text)
 
 
 def aadhar_text(text: str):
@@ -265,7 +267,6 @@ def DL_text(text: str):
     print("-------------------------------------------------------------------------------------")
 
     return result
-
 
 def voterID_text(text: str):
 
