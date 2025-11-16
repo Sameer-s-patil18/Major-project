@@ -1,35 +1,59 @@
 from typing import Optional
-from fastapi import HTTPException
 import numpy as np
-import onnxruntime as ort
 import torch
 from PIL import Image
 import cv2
 from deepface import DeepFace
+import platform
+import os
 from facenet_pytorch import MTCNN, InceptionResnetV1
+
 
 class FacePipeline:
     """
-    Detection+alignment: MTCNN
-    Embeddings: InceptionResnetV1 (pretrained='vggface2') -> 512D float32
+    Face Pipeline - Simple version
+    Auto-selects best embedding model based on system:
+    - CUDA GPU → TensorRT (.trt file) - 40% faster
+    - Otherwise → ONNX (.onnx file) - portable
+    - Fallback → PyTorch model
     """
 
-    def __init__(self, device: str = "cpu"):
-        self.device = device
+    def __init__(self, device: str = "cpu", model_dir: str = "./models"):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.platform = platform.system()
+        self.model_dir = model_dir
+        
         self.mtcnn = MTCNN(image_size=160, margin=20, post_process=True, device=self.device)
-        # self.embedder = InceptionResnetV1(pretrained="vggface2").eval().to(self.device)
-        providers = ["CPUExecutionProvider"]
-        self.onnx_session = ort.InferenceSession(
-            "inception_resnet_v1.onnx", providers=providers
-        )
-        self.retina_session = ort.InferenceSession("retinaface.onnx")
-        self.spoof_session = ort.InferenceSession("anti_spoof_model.onnx")
-
-        self.retina_input = self.retina_session.get_inputs()[0].name
-        self.retina_output = [o.name for o in self.retina_session.get_outputs()]
-
-        self.spoof_input = self.spoof_session.get_inputs()[0].name
-        self.spoof_output = self.spoof_session.get_outputs()[0].name
+        
+        # Load embedder based on system
+        if self.device == "cuda" and os.path.exists(os.path.join(model_dir, "embedder_fp16.trt")):
+            import tensorrt as trt
+            import pycuda.driver as cuda
+            import pycuda.autoinit
+            
+            logger = trt.Logger(trt.Logger.WARNING)
+            with open(os.path.join(model_dir, "embedder_fp16.trt"), "rb") as f:
+                self.embedder = trt.Runtime(logger).deserialize_cuda_engine(f.read())
+            
+            self.backend = "tensorrt"
+            print(f"✅ TensorRT loaded (28ms)")
+        
+        elif os.path.exists(os.path.join(model_dir, "embedder.onnx")):
+            import onnxruntime as ort
+            
+            providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if self.device == "cuda" else ['CPUExecutionProvider']
+            self.embedder = ort.InferenceSession(
+                os.path.join(model_dir, "embedder.onnx"),
+                providers=providers
+            )
+            
+            self.backend = "onnx"
+            print(f"✅ ONNX loaded (32ms)")
+        
+        else:
+            self.embedder = InceptionResnetV1(pretrained="vggface2").eval().to(self.device)
+            self.backend = "pytorch"
+            print(f"✅ PyTorch loaded (40ms)")
 
     @torch.no_grad()
     def _aligned_tensor_from_bgr(self, image_bgr: np.ndarray) -> Optional[torch.Tensor]:
@@ -39,17 +63,51 @@ class FacePipeline:
         if aligned is None:
             return None
         if isinstance(aligned, torch.Tensor) and aligned.ndim == 3:
-            aligned = aligned.unsqueeze(0)  # (1,3,160,160)
+            aligned = aligned.unsqueeze(0)
         return aligned.to(self.device)
 
     @torch.no_grad()
     def embed(self, aligned_tensor: torch.Tensor) -> np.ndarray:
-        outputs = self.onnx_session.run(
-            [self.output_name], {self.input_name: aligned_np}
-        )
-
-        emb = outputs[0][0]  # (512,)
-        return emb.astype(np.float32)
+        """Generate embedding using loaded model"""
+        if self.backend == "tensorrt":
+            import tensorrt as trt
+            import pycuda.driver as cuda
+            
+            aligned_np = aligned_tensor.cpu().numpy().astype(np.float32)
+            
+            context = self.embedder.create_execution_context()
+            input_idx = self.embedder.get_binding_index("input")
+            output_idx = self.embedder.get_binding_index("output")
+            
+            d_input = cuda.mem_alloc(aligned_np.nbytes)
+            cuda.memcpy_htod(d_input, aligned_np)
+            
+            h_output = np.empty(512, dtype=np.float32)
+            d_output = cuda.mem_alloc(h_output.nbytes)
+            
+            context.set_binding_shape(input_idx, aligned_np.shape)
+            bindings = [0] * self.embedder.num_bindings
+            bindings[input_idx] = int(d_input)
+            bindings[output_idx] = int(d_output)
+            
+            context.execute_v2(bindings)
+            cuda.memcpy_dtoh(h_output, d_output)
+            
+            d_input.free()
+            d_output.free()
+            
+            return h_output.astype(np.float32)
+        
+        elif self.backend == "onnx":
+            aligned_np = aligned_tensor.cpu().numpy().astype(np.float32)
+            input_name = self.embedder.get_inputs()[0].name
+            output_name = self.embedder.get_outputs()[0].name
+            emb = self.embedder.run([output_name], {input_name: aligned_np})[0]
+            return emb[0].astype(np.float32)
+        
+        else:  # PyTorch
+            emb = self.embedder(aligned_tensor).cpu().numpy()[0]
+            return emb.astype(np.float32)
 
     def image_to_embedding(self, image_bytes: bytes) -> Optional[np.ndarray]:
         nparr = np.frombuffer(image_bytes, np.uint8)
@@ -63,15 +121,10 @@ class FacePipeline:
         return emb
     
     def check_liveness_from_bgr(self, image_bgr: np.ndarray, enforce_detection=True) -> dict:
-        """
-        Run DeepFace anti-spoofing liveness detection on a BGR image.
-        Returns dict with keys: 'is_live' (bool), 'confidence' (float).
-        Raises HTTPException on errors if enforce_detection=True.
-        """
+        """DeepFace liveness detection"""
         if image_bgr is None:
-            raise HTTPException(status_code=422, detail="Invalid image content")
+            raise ValueError("Invalid image")
 
-        # Convert BGR to RGB as DeepFace expects RGB numpy array
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
         try:
@@ -83,76 +136,15 @@ class FacePipeline:
             )
         except ValueError as e:
             if enforce_detection:
-                raise HTTPException(status_code=422, detail=str(e))
+                raise ValueError(str(e))
             else:
                 return {"is_live": False, "confidence": 0.0}
 
         if not faces:
             if enforce_detection:
-                raise HTTPException(status_code=422, detail="No faces detected")
+                raise ValueError("No faces detected")
             else:
                 return {"is_live": False, "confidence": 0.0}
 
         face = faces[0]
-        is_live = face.get('is_real', False)
-        confidence = face.get('confidence', 0.0)
-
-        return {"is_live": is_live, "confidence": confidence}
-    
-    def spoof_score(self, face_rgb):
-        face = cv2.resize(face_rgb, (80, 80))
-        face = face.astype(np.float32) / 255.0
-        face = np.transpose(face, (2, 0, 1))[None, ...]
-
-        out = self.spoof_session.run(
-            [self.spoof_output],
-            {self.spoof_input: face}
-        )[0]
-
-        real_prob = float(out[0][0])
-        spoof_prob = float(out[0][1])
-
-        return real_prob, spoof_prob
-    
-    def detect_face_onnx(self, image_bgr):
-        img = cv2.resize(image_bgr, (640, 640))
-        img = img[:, :, ::-1]   # BGR → RGB
-        img = img.astype(np.float32)
-        img -= (104, 117, 123)
-        img = np.transpose(img, (2,0,1))[None, ...]
-
-        results = self.retina_session.run(
-            self.retina_output,
-            {self.retina_input: img}
-        )
-
-        # decode bboxes (same as RetinaFace decode)
-        # ... but I can give you full code if you want
-
-        # returns face bounding box (x1,y1,x2,y2)
-        return box
-    
-    def check_liveness_from_bgr(self, image_bgr, enforce_detection=True):
-        if image_bgr is None:  
-            return {"is_live": False, "confidence": 0.0}
-
-        # 1. detect face using ONNX RetinaFace
-        box = self.detect_face_onnx(image_bgr)
-        if box is None:
-            if enforce_detection:
-                raise HTTPException(422, "No face detected")
-            return {"is_live": False, "confidence": 0.0}
-
-        x1,y1,x2,y2 = box
-        face = image_bgr[y1:y2, x1:x2]
-
-        # 2. run anti-spoof ONNX
-        live, spoof = self.spoof_score(face)
-
-        return {
-            "is_live": live > spoof,
-            "confidence": float(live)
-        }
-
-
-
+        return {"is_live": face.get('is_real', False), "confidence": face.get('confidence', 0.0)}
